@@ -113,7 +113,7 @@ class BrowserClient(
             return super.shouldInterceptRequest(view, request)
         }
         return try {
-            injectHtml(view, url)
+            injectHtml(view, url, engineScript)
         } catch (e: Exception) {
             null
         }
@@ -134,7 +134,7 @@ class BrowserClient(
     }
 
     @SuppressLint("ObsoleteSdkInt")
-    private fun injectHtml(view: WebView, url: String): WebResourceResponse? {
+    private fun injectHtml(view: WebView, url: String, script: String): WebResourceResponse? {
         val cookie = CookieManager.getInstance().getCookie(url)
         val builder = Request.Builder()
             .url(url)
@@ -177,7 +177,7 @@ class BrowserClient(
                     runCatching { html = String(body, Charset.forName(m.groupValues[1])) }
                 }
             }
-            val injected = injectIntoHtml(html, engineScript)
+            val injected = injectIntoHtml(html, script)
             val stream = ByteArrayInputStream(injected.toByteArray(Charsets.UTF_8))
             return WebResourceResponse("text/html", "UTF-8", stream)
         }
