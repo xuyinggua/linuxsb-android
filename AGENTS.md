@@ -38,7 +38,7 @@ app/src/main/
     web/                  # 主 WebView 行为
       BrowserClient.kt      # 拦截导航/外部 URL、HTML 注入、脚本引擎注入、页面回调
       BrowserChromeClient.kt# 标题/进度/JS 弹窗/文件上传
-      ViewportFix.kt        # 修复 Android WebView vh=0 的 bug（CSS 注入）
+      ViewportFix.kt        # 修复 Android WebView vh=0 的 bug（纯 CSS 覆盖清单 + 审计工具）
     scripts/              # 油猴引擎（Kotlin 侧）
       ScriptManager.kt      # 下载/解析/落盘/读取脚本与依赖
       MetadataParser.kt     # 解析 ==UserScript== 元数据块
@@ -102,7 +102,7 @@ app/src/main/
 | 调整页面注入策略 | `web/BrowserClient.kt`（`isInjectionEligible` / `injectIntoHtml`） |
 | 新增底部标签页 | `MainActivity.kt` `BottomNavBar` 与 `when(selectedTab)` 分支 |
 | 站点结构变化导致解析失败 | `profile/ProfileManager.kt` 中的正则（`user-header`/`user-name`、登录判定） |
-| vh bug 影响新弹窗 | `web/ViewportFix.kt` 追加 CSS |
+| vh bug 影响新弹窗 | 先查 `web/ViewportFix.kt` 的 `FIXES` 审计清单（含站点 CSS 版本基准）；站点改版后用真机 `window.__sbViewportStatus()` 复核，必要时在 `FIXES` 增补规则 |
 
 ## 6. 构建与验证
 
@@ -130,4 +130,4 @@ app/src/main/
 - 油猴脚本为第一版，`GM_*` API 子集实现，复杂脚本（多 `@require`、iframe、高级 GM_* 权限）可能不兼容。
 - 隔离登录依赖 WebView 105+ 的多 Profile 能力，旧设备回退主 WebView 内登录。
 - `shouldInterceptRequest` 同步阻塞网络，`injectHtml` 每次主框架导航都会用 OkHttp 重发一次请求，注意与 WebView 自身请求的重复流量。
-- WebView `vh` 解析为 0 的 bug 通过 `ViewportFix` CSS 覆盖，站点改版导致新弹窗仍塌陷时需同步更新。
+- WebView `vh`/`dvh` 解析为 0 的 bug 通过 `web/ViewportFix.kt` 的纯 CSS 覆盖修复（元素需在 `position:fixed` 容器内，`%` 才等效）；覆盖清单带站点 CSS 版本基准，站点改版后用真机 `window.__sbViewportStatus()` 复核，必要时在 `FIXES` 增补规则。
