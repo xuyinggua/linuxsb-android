@@ -15,6 +15,7 @@ object AppState {
     var onProgressChanged: ((Int) -> Unit)? = null
     var onPageFinished: ((WebView) -> Unit)? = null
     var onAccountChanged: (() -> Unit)? = null
+    var onScriptsChanged: (() -> Unit)? = null
 
     fun open(url: String) {
         val wv = webView ?: return

@@ -19,6 +19,10 @@ object Prefs {
         get() = sp.getBoolean("scripts_enabled", false)
         set(value) = sp.edit().putBoolean("scripts_enabled", value).apply()
 
+    var builtinsInitialized: Boolean
+        get() = sp.getBoolean("builtins_initialized", false)
+        set(value) = sp.edit().putBoolean("builtins_initialized", value).apply()
+
     fun applyFontZoom(webView: WebView) {
         runCatching { webView.settings.textZoom = fontZoom }
     }

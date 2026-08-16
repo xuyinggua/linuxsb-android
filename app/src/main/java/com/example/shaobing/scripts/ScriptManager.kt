@@ -4,11 +4,13 @@ import android.content.Context
 import com.example.shaobing.ShaoBingApp
 import com.example.shaobing.db.Userscript
 import com.example.shaobing.net.OkHttpHolder
+import com.example.shaobing.ui.Prefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.Request
 import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
@@ -16,6 +18,67 @@ object ScriptManager {
 
     const val SCRIPTS_DIR = "userscripts"
     const val REQUIRES_DIR = "requires"
+
+    private const val BUILTIN_NAMESPACE = "com.shaobing.builtin"
+
+    private val BUILTIN_ASSETS = listOf("builtin_top_sticky.user.js")
+
+    enum class ScriptSource(val baseUrl: String, val label: String) {
+        GREASYFORK("https://api.greasyfork.org", "GreasyFork"),
+        SLEAZYFORK("https://api.sleazyfork.org", "SleazyFork")
+    }
+
+    data class ScriptSearchResult(
+        val name: String,
+        val description: String,
+        val version: String,
+        val pageUrl: String,
+        val codeUrl: String,
+        val totalInstalls: Long
+    )
+
+    /**
+     * Search scripts on GreasyFork / SleazyFork (same JSON API). Returns an
+     * empty list when the query is blank or the request fails.
+     */
+    suspend fun searchScripts(source: ScriptSource, query: String): List<ScriptSearchResult> =
+        withContext(Dispatchers.IO) {
+            if (query.isBlank()) return@withContext emptyList()
+            val url = source.baseUrl + "/en/scripts.json?q=" +
+                java.net.URLEncoder.encode(query.trim(), "UTF-8") + "&page=1"
+            val body = runCatching {
+                OkHttpHolder.client.newCall(
+                    Request.Builder()
+                        .url(url)
+                        .header("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0 Mobile Safari/537.36")
+                        .header("Accept", "application/json")
+                        .build()
+                ).execute().use { if (it.isSuccessful) it.body?.string() else null }
+            }.getOrNull() ?: return@withContext emptyList()
+
+            return@withContext runCatching {
+                val root = JSONObject(body)
+                val arr = root.optJSONArray("query") ?: JSONArray()
+                (0 until arr.length()).mapNotNull { i ->
+                    val o = arr.getJSONObject(i)
+                    if (o.optBoolean("deleted", false)) return@mapNotNull null
+                    val codeUrl = o.optString("code_url", "")
+                    if (codeUrl.isBlank()) return@mapNotNull null
+                    val pageUrl = o.optString("url", codeUrl)
+                    ScriptSearchResult(
+                        name = o.optString("name", "未命名"),
+                        description = stripHtml(o.optString("description", "")).trim(),
+                        version = o.optString("version", ""),
+                        pageUrl = pageUrl,
+                        codeUrl = codeUrl,
+                        totalInstalls = o.optLong("total_installs", 0L)
+                    )
+                }
+            }.getOrDefault(emptyList())
+        }
+
+    private fun stripHtml(html: String): String =
+        html.replace(Regex("<[^>]+>"), "").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
 
     data class DownloadResult(val script: Userscript)
 
@@ -144,6 +207,81 @@ object ScriptManager {
                 dao.setEnabled(s.id, false)
             }
         }
+    }
+
+    data class BuiltinInfo(
+        val asset: String,
+        val name: String,
+        val description: String?,
+        val version: String?,
+        val installed: Boolean
+    )
+
+    fun isBuiltin(script: Userscript): Boolean = script.sourceUrl.startsWith("builtin://")
+
+    fun builtinScripts(context: Context): List<BuiltinInfo> {
+        val dao = ShaoBingApp.db.userscriptDao()
+        return BUILTIN_ASSETS.mapNotNull { asset ->
+            val content = runCatching {
+                context.assets.open(asset).bufferedReader().use { it.readText() }
+            }.getOrNull() ?: return@mapNotNull null
+            val meta = MetadataParser.parse(content)
+            if (meta.name.isEmpty()) return@mapNotNull null
+            val installed = dao.all().any { it.namespace == meta.namespace && it.name == meta.name }
+            BuiltinInfo(
+                asset = asset,
+                name = meta.name,
+                description = meta.description,
+                version = meta.version,
+                installed = installed
+            )
+        }
+    }
+
+    /**
+     * Install built-in scripts on the very first launch only. Afterwards the
+     * user manages built-ins manually from the built-in list in the scripts UI.
+     */
+    suspend fun installBuiltinIfNeeded(context: Context) = withContext(Dispatchers.IO) {
+        if (Prefs.builtinsInitialized) return@withContext
+        for (asset in BUILTIN_ASSETS) {
+            installBuiltin(context, asset)
+        }
+        Prefs.builtinsInitialized = true
+    }
+
+    /**
+     * Install a single built-in script (shipped as an asset). Returns true when
+     * a new script was inserted, false when it is already installed.
+     */
+    suspend fun installBuiltin(context: Context, asset: String): Boolean = withContext(Dispatchers.IO) {
+        val dao = ShaoBingApp.db.userscriptDao()
+        val content = runCatching {
+            context.assets.open(asset).bufferedReader().use { it.readText() }
+        }.getOrNull() ?: return@withContext false
+        val meta = MetadataParser.parse(content)
+        if (meta.name.isEmpty()) return@withContext false
+        if (dao.all().any { it.namespace == meta.namespace && it.name == meta.name }) return@withContext false
+
+        File(scriptsDir(context), asset).writeText(content)
+        dao.insert(
+            Userscript(
+                name = meta.name,
+                namespace = meta.namespace,
+                description = meta.description,
+                version = meta.version,
+                sourceUrl = "builtin://$asset",
+                file = asset,
+                matches = JSONArray(meta.matches).toString(),
+                includes = JSONArray(meta.includes).toString(),
+                requires = "[]",
+                requireFiles = "[]",
+                runAt = meta.runAt,
+                grants = JSONArray(meta.grants).toString(),
+                enabled = true
+            )
+        )
+        true
     }
 
     fun enabledScriptsForUrl(context: Context, url: String): List<Userscript> {

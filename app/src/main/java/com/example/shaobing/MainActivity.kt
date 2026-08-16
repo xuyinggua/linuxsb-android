@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.OpenInBrowser
@@ -43,6 +44,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -97,6 +99,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ProfileManager.ensureDefaultProfile()
+        ShaoBingApp.applicationScope.launch(Dispatchers.IO) {
+            ScriptManager.installBuiltinIfNeeded(applicationContext)
+        }
         if (BuildConfig.DEBUG) {
             WebView.setWebContentsDebuggingEnabled(true)
         }
@@ -182,6 +187,7 @@ private fun MainApp() {
     var currentBookmarked by remember { mutableStateOf(false) }
     var scriptsEnabled by remember { mutableStateOf(Prefs.scriptsEnabled) }
     var loginCloseTick by remember { mutableIntStateOf(0) }
+    var needsRefresh by remember { mutableStateOf(false) }
 
     fun refreshBookmarkState() {
         val url = AppState.currentUrl
@@ -192,8 +198,12 @@ private fun MainApp() {
         AppState.onTitleChanged = { topBarTitle = it }
         AppState.onProgressChanged = { progress = it }
         AppState.onUrlChanged = { refreshBookmarkState() }
-        AppState.onPageFinished = { webView -> ProfileManager.onMainLoginCheck(webView) }
+        AppState.onPageFinished = { webView ->
+            needsRefresh = false
+            ProfileManager.onMainLoginCheck(webView)
+        }
         AppState.onAccountChanged = { accountName = ProfileManager.currentProfileName() }
+        AppState.onScriptsChanged = { needsRefresh = true }
         accountName = ProfileManager.currentProfileName()
         browserClient.onLoginLink = { url ->
             val cur = ShaoBingApp.db.profileDao().current()
@@ -334,6 +344,38 @@ private fun MainApp() {
                 factory = { webView },
                 modifier = Modifier.fillMaxSize()
             )
+
+            if (selectedTab == 0 && needsRefresh) {
+                Surface(
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Row(
+                        Modifier.padding(start = 16.dp, end = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "脚本已更改，刷新页面后生效",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.weight(1f).padding(vertical = 10.dp)
+                        )
+                        TextButton(onClick = {
+                            needsRefresh = false
+                            AppState.reload()
+                        }) {
+                            Text("刷新")
+                        }
+                        IconButton(onClick = { needsRefresh = false }) {
+                            Icon(Icons.Default.Close, contentDescription = "关闭提示")
+                        }
+                    }
+                }
+            }
 
             when (selectedTab) {
                 1 -> ScriptsScreen(onBack = { selectedTab = 0 })
