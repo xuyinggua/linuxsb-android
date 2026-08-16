@@ -22,6 +22,7 @@
 ### 书签
 - 顶部 ☆ 按钮收藏/取消收藏当前页（空心=未收藏，实心=已收藏）
 - 手动添加书签（网址 + 标题）
+- **TOML 导入导出**：书签页右上角可导入/导出 TOML 文件（`.toml`，按 URL 去重）
 - 书签页顶部快捷链接（如：签到 `https://linux.sb/daily_checkin`）
 
 ### 多账号快速切换
@@ -98,3 +99,4 @@ KEYPASSWORD=...
 - 多账号切换基于单 WebView + Cookie/localStorage 快照；切号后仅刷新当前页
 - 油猴脚本第一版以常用 GM_* API 为主，复杂脚本可能存在兼容问题
 - 隔离登录依赖 WebView 105+（旧设备回退为主 WebView 内登录）
+- 修复 Android WebView `vh` 单位解析为 0 的 bug（页面加载完成后注入 CSS 覆盖，保证弹窗正常渲染）

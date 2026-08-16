@@ -93,10 +93,11 @@ class BrowserClient(
         if (url != null) AppState.currentUrl = url
         AppState.onProgressChanged?.invoke(100)
         val queue = synchronized(pendingJs) {
-            if (pendingJs.isEmpty()) return
-            pendingJs.toList().also { pendingJs.clear() }
+            if (pendingJs.isEmpty()) emptyList()
+            else pendingJs.toList().also { pendingJs.clear() }
         }
         for (js in queue) view.evaluateJavascript(js, null)
+        view.evaluateJavascript(ViewportFix.injectJs(), null)
         AppState.onPageFinished?.invoke(view)
     }
 

@@ -1,5 +1,8 @@
 package com.example.shaobing.ui
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,7 +18,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.shaobing.ShaoBingApp
@@ -41,14 +47,78 @@ fun BookmarksScreen(
     onBack: () -> Unit,
     onOpen: (String) -> Unit
 ) {
+    val context = LocalContext.current
     var bookmarks by remember { mutableStateOf(ShaoBingApp.db.bookmarkDao().all()) }
     var showAdd by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<Bookmark?>(null) }
+
+    fun toast(msg: String) {
+        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+    }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/toml")
+    ) { uri ->
+        if (uri != null) {
+            ShaoBingApp.applicationScope.launch(Dispatchers.IO) {
+                val ok = runCatching {
+                    val bytes = BookmarkIO.exportToml(bookmarks).toByteArray(Charsets.UTF_8)
+                    context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) } != null
+                }.getOrDefault(false)
+                withContext(Dispatchers.Main) {
+                    toast(if (ok) "书签已导出" else "导出失败")
+                }
+            }
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            ShaoBingApp.applicationScope.launch(Dispatchers.IO) {
+                val text = runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                        ?.toString(Charsets.UTF_8)
+                }.getOrNull()
+                if (text.isNullOrBlank()) {
+                    withContext(Dispatchers.Main) { toast("读取文件失败") }
+                    return@launch
+                }
+                val dao = ShaoBingApp.db.bookmarkDao()
+                val seen = dao.all().map { it.url }.toMutableSet()
+                val parsed = BookmarkIO.parseToml(text)
+                var added = 0
+                var skipped = 0
+                for (b in parsed) {
+                    if (seen.add(b.url)) {
+                        dao.insert(b)
+                        added++
+                    } else {
+                        skipped++
+                    }
+                }
+                val updated = dao.all()
+                withContext(Dispatchers.Main) {
+                    bookmarks = updated
+                    toast("导入完成：新增 $added 条" + if (skipped > 0) "，跳过重复 $skipped 条" else "")
+                }
+            }
+        }
+    }
 
     SecondaryScreen(
         title = "书签",
         onBack = onBack,
         actions = {
+            IconButton(onClick = {
+                importLauncher.launch(arrayOf("application/toml", "text/plain", "application/octet-stream", "*/*"))
+            }) {
+                Icon(Icons.Default.Download, contentDescription = "导入书签")
+            }
+            IconButton(onClick = { exportLauncher.launch("shaobing_bookmarks.toml") }) {
+                Icon(Icons.Default.Upload, contentDescription = "导出书签")
+            }
             IconButton(onClick = { showAdd = true }) {
                 Icon(Icons.Default.Add, contentDescription = "添加书签")
             }
