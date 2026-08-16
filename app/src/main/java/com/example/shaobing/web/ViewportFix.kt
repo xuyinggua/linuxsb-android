@@ -9,7 +9,8 @@ object ViewportFix {
 
     private const val CSS =
         ".modal-panel{max-height:calc(100% - 32px) !important}" +
-        ".modal-backdrop:has(.home-keyword-filter-settings){height:100% !important}"
+        ".modal-backdrop:has(.home-keyword-filter-settings){height:100% !important}" +
+        "@media (max-width: 680px){.posting-notice-dialog{height:100% !important}}"
 
     fun injectJs(): String = """
         (function(){
