@@ -1,0 +1,4 @@
+- [x] 备份并恢复 `MainActivity.kt`：移除 `enableEdgeToEdge()`，保留 Insets 转发与自适应配置
+- [x] 修改 `ViewportFix.kt`：彻底重写为基于 `--sb-vh` 动态像素的通用方案
+- [x] 修改 `BrowserClient.kt`：恢复补丁注入调用并保留布局刷新
+- [x] 编译并最终验证

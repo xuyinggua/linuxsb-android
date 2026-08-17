@@ -13,6 +13,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.ViewCompat
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -165,6 +166,14 @@ private fun MainApp() {
             settings.displayZoomControls = false
             settings.mediaPlaybackRequiresUserGesture = false
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+            settings.useWideViewPort = true
+            settings.loadWithOverviewMode = true
+            
+            ViewCompat.setOnApplyWindowInsetsListener(this) { v, insets ->
+                v.onApplyWindowInsets(insets.toWindowInsets())
+                insets
+            }
+
             Prefs.applyFontZoom(this)
             webViewClient = browserClient
             if (activity != null) {

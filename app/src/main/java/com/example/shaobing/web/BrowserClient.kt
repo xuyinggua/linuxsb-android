@@ -97,6 +97,7 @@ class BrowserClient(
             else pendingJs.toList().also { pendingJs.clear() }
         }
         for (js in queue) view.evaluateJavascript(js, null)
+        view.requestLayout()
         view.evaluateJavascript(ViewportFix.injectJs(), null)
         AppState.onPageFinished?.invoke(view)
     }
